@@ -1,0 +1,18 @@
+{
+  "movement": {
+    "up": ["w", "up"],
+    "down": ["s", "down"],
+    "left": ["a", "left"],
+    "right": ["d", "right"]
+  },
+  "actions": {
+    "attack": ["space", "z"],
+    "interact": ["e", "x"],
+    "inventory": ["i", "tab"],
+    "pause": ["escape", "p"]
+  },
+  "ui": {
+    "confirm": ["enter", "space"],
+    "cancel": ["escape", "backspace"]
+  }
+}

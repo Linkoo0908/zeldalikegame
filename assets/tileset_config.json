@@ -1,0 +1,23 @@
+{
+  "tileset": {
+    "name": "basic_tileset",
+    "tile_size": 32,
+    "tiles": {
+      "1": {
+        "name": "wall",
+        "image": "tile_wall.png",
+        "solid": true
+      },
+      "2": {
+        "name": "floor", 
+        "image": "tile_floor.png",
+        "solid": false
+      },
+      "3": {
+        "name": "stone",
+        "image": "tile_stone.png", 
+        "solid": true
+      }
+    }
+  }
+}
