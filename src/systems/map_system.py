@@ -203,22 +203,27 @@ class MapSystem:
         return (width, height)
     
     def save_map_state(self, map_path: str, enemies: List[Dict], items: List[Dict], 
-                      player_data: Dict = None) -> None:
+                      extended_data: Dict = None) -> None:
         """
-        Save the current state of a map (enemies, items, player data).
+        Save the current state of a map (enemies, items, extended data).
         
         Args:
             map_path: Path to the map file
             enemies: List of enemy data dictionaries
             items: List of item data dictionaries
-            player_data: Optional player data to save with map
+            extended_data: Extended data including doors, stage state, etc.
         """
-        self.map_states[map_path] = {
-            'enemies': enemies.copy() if enemies else [],
-            'items': items.copy() if items else [],
-            'player_data': player_data.copy() if player_data else None,
-            'timestamp': pygame.time.get_ticks()
-        }
+        if extended_data:
+            # Use extended data format
+            self.map_states[map_path] = extended_data.copy()
+            self.map_states[map_path]['timestamp'] = pygame.time.get_ticks()
+        else:
+            # Legacy format
+            self.map_states[map_path] = {
+                'enemies': enemies.copy() if enemies else [],
+                'items': items.copy() if items else [],
+                'timestamp': pygame.time.get_ticks()
+            }
     
     def load_map_state(self, map_path: str) -> Optional[Dict[str, Any]]:
         """

@@ -309,7 +309,40 @@ class GameScene(Scene):
         self.stage_cleared = False
         self.doors_unlocked = False
         
+        # Check if this map was already cleared
+        if self.game_state_manager and self.current_map_path:
+            map_clear_flag = f"map_cleared_{self.current_map_path}"
+            if self.game_state_manager.get_global_flag(map_clear_flag, False):
+                print(f"Map {self.current_map_path} was already cleared - unlocking doors")
+                self.stage_cleared = True
+                self.doors_unlocked = True
+                # Unlock all doors
+                for door in self.doors:
+                    door.unlock()
+        
         print(f"Spawned {len(self.enemies)} enemies, {len(self.items)} items, and {len(self.doors)} doors")
+    
+    def _spawn_doors_from_map(self) -> None:
+        """Spawn only doors from map data."""
+        if not self.current_map_data:
+            return
+        
+        objects = self.current_map_data.get('layers', {}).get('objects', [])
+        
+        for obj_data in objects:
+            obj_type = obj_data.get('type')
+            
+            if obj_type == 'door':
+                x = obj_data.get('x', 0)
+                y = obj_data.get('y', 0)
+                door_id = obj_data.get('door_id', f'door_{len(self.doors)}')
+                target_map = obj_data.get('target_map')
+                target_position = obj_data.get('target_position', [x, y])
+                width = obj_data.get('width', 32)
+                height = obj_data.get('height', 32)
+                
+                door = Door(x, y, door_id, target_map, tuple(target_position), width, height)
+                self.doors.append(door)
     
     def _find_safe_spawn_position(self, preferred_x: float, preferred_y: float) -> Tuple[float, float]:
         """
@@ -512,7 +545,7 @@ class GameScene(Scene):
             # Could implement fallback behavior here
     
     def _save_current_map_state(self) -> None:
-        """Save the current map state (enemies, items, player data)."""
+        """Save the current map state (enemies, items, player data, stage state)."""
         if not self.current_map_path or not self.map_system:
             return
         
@@ -537,6 +570,28 @@ class GameScene(Scene):
                     'item_type': getattr(item, 'item_type', 'unknown')
                 })
             
+            # Convert doors to serializable data
+            door_data = []
+            for door in self.doors:
+                door_data.append({
+                    'x': door.x,
+                    'y': door.y,
+                    'door_id': door.door_id,
+                    'target_map': door.target_map,
+                    'target_position': door.target_position,
+                    'width': door.width,
+                    'height': door.height,
+                    'is_locked': door.is_locked,
+                    'is_open': door.is_open
+                })
+            
+            # Save stage state
+            stage_state = {
+                'stage_cleared': self.stage_cleared,
+                'doors_unlocked': self.doors_unlocked,
+                'initial_enemy_count': self.initial_enemy_count
+            }
+            
             # Save player state
             player_data = None
             if self.player and self.game_state_manager:
@@ -545,11 +600,21 @@ class GameScene(Scene):
                     self.game_state_manager.save_inventory_state(self.inventory)
                 player_data = self.game_state_manager.player_state.copy()
             
-            # Save to map system
-            self.map_system.save_map_state(self.current_map_path, enemy_data, item_data, player_data)
+            # Create extended map state data
+            extended_map_data = {
+                'enemies': enemy_data,
+                'items': item_data,
+                'doors': door_data,
+                'stage_state': stage_state,
+                'player_data': player_data
+            }
+            
+            # Save to map system with extended data
+            self.map_system.save_map_state(self.current_map_path, enemy_data, item_data, extended_map_data)
             
             print(f"Saved state for map: {self.current_map_path}")
-            print(f"  Enemies: {len(enemy_data)}, Items: {len(item_data)}")
+            print(f"  Enemies: {len(enemy_data)}, Items: {len(item_data)}, Doors: {len(door_data)}")
+            print(f"  Stage cleared: {self.stage_cleared}, Doors unlocked: {self.doors_unlocked}")
             
         except Exception as e:
             print(f"Error saving map state: {e}")
@@ -575,9 +640,48 @@ class GameScene(Scene):
             # Clear current objects
             self.enemies.clear()
             self.items.clear()
+            self.doors.clear()
+            
+            # Check if we have extended map data (new format)
+            if isinstance(saved_state, dict) and 'doors' in saved_state:
+                # New format with extended data
+                enemy_data = saved_state.get('enemies', [])
+                item_data = saved_state.get('items', [])
+                door_data = saved_state.get('doors', [])
+                stage_state = saved_state.get('stage_state', {})
+                
+                # Restore stage state
+                self.stage_cleared = stage_state.get('stage_cleared', False)
+                self.doors_unlocked = stage_state.get('doors_unlocked', False)
+                self.initial_enemy_count = stage_state.get('initial_enemy_count', 0)
+                
+                # Restore doors with their states
+                for door_info in door_data:
+                    try:
+                        door = Door(
+                            door_info['x'],
+                            door_info['y'],
+                            door_info['door_id'],
+                            door_info.get('target_map'),
+                            tuple(door_info.get('target_position', [0, 0])),
+                            door_info.get('width', 32),
+                            door_info.get('height', 32)
+                        )
+                        door.is_locked = door_info.get('is_locked', True)
+                        door.is_open = door_info.get('is_open', False)
+                        door._update_sprite()  # Update visual state
+                        self.doors.append(door)
+                    except Exception as e:
+                        print(f"Error restoring door: {e}")
+                
+            else:
+                # Old format - fall back to default behavior
+                enemy_data = saved_state.get('enemies', [])
+                item_data = saved_state.get('items', [])
+                # Spawn doors from map data
+                self._spawn_doors_from_map()
             
             # Restore enemies
-            enemy_data = saved_state.get('enemies', [])
             for enemy_info in enemy_data:
                 try:
                     from src.objects.enemy import Enemy
@@ -599,7 +703,6 @@ class GameScene(Scene):
                     pass
             
             # Restore items
-            item_data = saved_state.get('items', [])
             for item_info in item_data:
                 try:
                     from src.objects.item import Item
@@ -613,7 +716,8 @@ class GameScene(Scene):
                     # Fallback for testing
                     pass
             
-            print(f"Restored {len(self.enemies)} enemies and {len(self.items)} items")
+            print(f"Restored {len(self.enemies)} enemies, {len(self.items)} items, and {len(self.doors)} doors")
+            print(f"Stage state - Cleared: {self.stage_cleared}, Doors unlocked: {self.doors_unlocked}")
             
             # Note: Player state is handled separately and doesn't need to be restored here
             # since the player object persists across map transitions
@@ -689,6 +793,12 @@ class GameScene(Scene):
             
             print("🎉 Stage Cleared! All enemies defeated!")
             print("🚪 Doors are now unlocked!")
+            
+            # Set global flag for this map being cleared
+            if self.game_state_manager and self.current_map_path:
+                map_clear_flag = f"map_cleared_{self.current_map_path}"
+                self.game_state_manager.set_global_flag(map_clear_flag, True)
+                print(f"Set global flag: {map_clear_flag}")
             
             # Unlock all doors
             for door in self.doors:
