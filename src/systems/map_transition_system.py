@@ -67,6 +67,10 @@ class MapTransitionSystem:
         
         # Pending transition data
         self.pending_transition: Optional[MapTransition] = None
+        
+        # Cooldown to prevent immediate transitions after map load
+        self.transition_cooldown = 0.0
+        self.cooldown_duration = 1.0  # 1 second cooldown after map load
     
     def set_current_map(self, map_path: str) -> None:
         """
@@ -76,6 +80,8 @@ class MapTransitionSystem:
             map_path: Path to the current map file
         """
         self.current_map_path = map_path
+        # Reset cooldown when setting new map
+        self.transition_cooldown = self.cooldown_duration
     
     def add_boundary_transition(self, 
                               direction: TransitionDirection,
@@ -163,7 +169,7 @@ class MapTransitionSystem:
         Returns:
             MapTransition if triggered, None otherwise
         """
-        if self.is_transitioning or not map_data:
+        if self.is_transitioning or not map_data or self.transition_cooldown > 0:
             return None
         
         player_rect = pygame.Rect(player_x - 16, player_y - 16, 32, 32)
@@ -225,6 +231,10 @@ class MapTransitionSystem:
         Args:
             dt: Delta time in seconds
         """
+        # Update cooldown
+        if self.transition_cooldown > 0:
+            self.transition_cooldown -= dt
+        
         if not self.is_transitioning:
             return
         

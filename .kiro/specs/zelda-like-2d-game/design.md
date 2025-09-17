@@ -154,6 +154,53 @@ class Item(GameObject):
     def get_effect(self)
 ```
 
+#### Door Class
+스테이지 간 전환을 위한 문 오브젝트를 나타내는 클래스입니다.
+
+```python
+class Door(GameObject):
+    def __init__(self, x, y, door_id, target_map, target_position)
+    def unlock(self)
+    def open(self)
+    def can_pass_through(self)
+    def try_interact(self, player)
+```
+
+## Stage Clear System
+
+### Stage Management
+게임은 스테이지 기반으로 진행되며, 각 스테이지는 명확한 클리어 조건을 가집니다.
+
+#### Stage Clear Conditions
+- **Primary Condition**: 모든 적 처치
+- **Secondary Conditions**: 특정 아이템 수집, 퍼즐 해결 (향후 확장)
+
+#### Stage Progression Flow
+1. **Stage Start**: 플레이어가 새로운 스테이지에 진입
+2. **Objective Display**: 클리어 조건 제시 (모든 적 처치)
+3. **Progress Tracking**: 남은 적 수 실시간 추적
+4. **Stage Clear**: 조건 달성 시 클리어 메시지 표시
+5. **Door Unlock**: 다음 스테이지로의 문 잠금 해제
+6. **Stage Transition**: 플레이어가 문을 통해 다음 스테이지로 이동
+
+### Door System
+문은 스테이지 간 전환의 핵심 메커니즘입니다.
+
+#### Door States
+- **Locked**: 초기 상태, 스테이지 클리어 전 (갈색, 자물쇠 표시)
+- **Unlocked**: 스테이지 클리어 후 (초록색, 글로우 효과)
+- **Open**: 플레이어 상호작용 후 (금색, 열린 문 모양)
+
+#### Visual Feedback
+- **Color Coding**: 상태별 색상 구분
+- **Animation Effects**: 잠금 해제 시 글로우 애니메이션
+- **Interaction Indicators**: 상호작용 가능 시 'E' 키 표시
+
+### Stage Design Principles
+- **Progressive Difficulty**: 스테이지별 난이도 점진적 증가
+- **Enemy Variety**: 다양한 적 타입과 배치 패턴
+- **Reward System**: 스테이지 클리어 시 경험치 및 아이템 보상
+
 ## Data Models
 
 ### Player Data
@@ -174,15 +221,17 @@ player_data = {
 ### Map Data
 ```python
 map_data = {
-    "width": 20,
-    "height": 15,
+    "width": 25,  # 화면 크기에 맞춘 고정 크기 (800px / 32px = 25 tiles)
+    "height": 19, # 화면 크기에 맞춘 고정 크기 (600px / 32px = 19 tiles)
     "tile_size": 32,
     "layers": {
         "background": [[tile_id, ...], ...],
         "collision": [[0, 1, 0, ...], ...],
         "objects": [
             {"type": "enemy", "x": 100, "y": 200, "enemy_type": "goblin"},
-            {"type": "item", "x": 150, "y": 250, "item_type": "health_potion"}
+            {"type": "item", "x": 150, "y": 250, "item_type": "health_potion"},
+            {"type": "door", "x": 300, "y": 50, "door_id": "stage_exit", 
+             "target_map": "next_stage.json", "target_position": [240, 320]}
         ]
     }
 }
@@ -283,16 +332,19 @@ zelda_like_game/
 │   ├── systems/
 │   │   ├── input_system.py
 │   │   ├── render_system.py
-│   │   └── collision_system.py
+│   │   ├── collision_system.py
+│   │   └── map_transition_system.py
 │   ├── objects/
 │   │   ├── game_object.py
 │   │   ├── player.py
 │   │   ├── enemy.py
-│   │   └── item.py
+│   │   ├── item.py
+│   │   └── door.py         # 스테이지 전환 문 오브젝트
 │   └── scenes/
 │       ├── menu_scene.py
 │       ├── game_scene.py
-│       └── inventory_scene.py
+│       ├── inventory_scene.py
+│       └── game_over_scene.py
 ├── assets/
 │   ├── images/
 │   ├── sounds/

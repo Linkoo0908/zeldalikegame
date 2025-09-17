@@ -24,6 +24,7 @@ try:
     from src.objects.player import Player
     from src.objects.enemy import Enemy
     from src.objects.item import Item
+    from src.objects.door import Door
 except ImportError:
     try:
         from systems.input_system import InputSystem
@@ -43,6 +44,7 @@ except ImportError:
         from objects.player import Player
         from objects.enemy import Enemy
         from objects.item import Item
+        from objects.door import Door
     except ImportError:
         # For testing - create placeholder classes
         class InputSystem: pass
@@ -62,6 +64,7 @@ except ImportError:
         class Player: pass
         class Enemy: pass
         class Item: pass
+        class Door: pass
 
 
 class GameScene(Scene):
@@ -89,6 +92,7 @@ class GameScene(Scene):
         self.player: Optional[Player] = None
         self.enemies: List[Enemy] = []
         self.items: List[Item] = []
+        self.doors: List[Door] = []
         
         # Player systems
         self.inventory: Optional[Inventory] = None
@@ -106,6 +110,11 @@ class GameScene(Scene):
         
         # Game configuration
         self.game_config: Dict[str, Any] = {}
+        
+        # Stage clear system
+        self.stage_cleared = False
+        self.initial_enemy_count = 0
+        self.doors_unlocked = False
     
     def initialize(self, game) -> None:
         """
@@ -172,9 +181,9 @@ class GameScene(Scene):
     
     def _initialize_game_objects(self) -> None:
         """Initialize game objects like player."""
-        # Create player at default position
-        start_x = self.game_config.get('player_start_x', 400)
-        start_y = self.game_config.get('player_start_y', 300)
+        # Create player at safe starting position (away from doors and transitions)
+        start_x = self.game_config.get('player_start_x', 160)  # Safe position away from walls and doors
+        start_y = self.game_config.get('player_start_y', 160)
         self.player = Player(start_x, start_y)
         
         # Load player sprite
@@ -229,12 +238,15 @@ class GameScene(Scene):
         try:
             # Try to load the default map
             default_map = self.game_config.get('default_map', 'assets/maps/test_map.json')
+            print(f"Attempting to load map: {default_map}")
             self._load_map(default_map)
             
-            print(f"Loaded initial map: {default_map}")
+            print(f"Successfully loaded initial map: {default_map}")
             
         except Exception as e:
             print(f"Warning: Failed to load initial map: {e}")
+            import traceback
+            traceback.print_exc()
             print("Continuing with empty map")
             self.current_map_data = self._create_default_map()
             self.current_map_path = None
@@ -266,7 +278,9 @@ class GameScene(Scene):
             
             if obj_type == 'enemy':
                 enemy_type = obj_data.get('enemy_type', 'goblin')
-                enemy = Enemy(x, y, enemy_type)
+                # Find safe spawn position away from player
+                safe_x, safe_y = self._find_safe_spawn_position(x, y)
+                enemy = Enemy(safe_x, safe_y, enemy_type)
                 # Load enemy sprite
                 if hasattr(enemy, 'load_sprite_from_loader'):
                     enemy.load_sprite_from_loader(self.sprite_loader)
@@ -279,8 +293,100 @@ class GameScene(Scene):
                 if hasattr(item, 'load_sprite_from_loader'):
                     item.load_sprite_from_loader(self.sprite_loader)
                 self.items.append(item)
+            
+            elif obj_type == 'door':
+                door_id = obj_data.get('door_id', f'door_{len(self.doors)}')
+                target_map = obj_data.get('target_map')
+                target_position = obj_data.get('target_position', [x, y])
+                width = obj_data.get('width', 32)
+                height = obj_data.get('height', 32)
+                
+                door = Door(x, y, door_id, target_map, tuple(target_position), width, height)
+                self.doors.append(door)
         
-        print(f"Spawned {len(self.enemies)} enemies and {len(self.items)} items")
+        # Set initial enemy count for stage clear tracking
+        self.initial_enemy_count = len(self.enemies)
+        self.stage_cleared = False
+        self.doors_unlocked = False
+        
+        print(f"Spawned {len(self.enemies)} enemies, {len(self.items)} items, and {len(self.doors)} doors")
+    
+    def _find_safe_spawn_position(self, preferred_x: float, preferred_y: float) -> Tuple[float, float]:
+        """
+        Find a safe spawn position that doesn't overlap with player.
+        
+        Args:
+            preferred_x: Preferred X position from map data
+            preferred_y: Preferred Y position from map data
+            
+        Returns:
+            Tuple of (safe_x, safe_y) coordinates
+        """
+        import random
+        import math
+        
+        if not self.player:
+            return (preferred_x, preferred_y)
+        
+        player_x = self.player.x + self.player.width / 2
+        player_y = self.player.y + self.player.height / 2
+        min_distance = 100.0  # Minimum distance from player
+        
+        # Check if preferred position is safe
+        distance = math.sqrt((preferred_x - player_x)**2 + (preferred_y - player_y)**2)
+        if distance >= min_distance:
+            # Check if position is not in collision
+            if not self._is_position_blocked(preferred_x, preferred_y):
+                return (preferred_x, preferred_y)
+        
+        # Find alternative safe position
+        map_width = self.current_map_data.get('width', 20) * self.current_map_data.get('tile_size', 32)
+        map_height = self.current_map_data.get('height', 15) * self.current_map_data.get('tile_size', 32)
+        
+        max_attempts = 50
+        for _ in range(max_attempts):
+            # Generate random position
+            x = random.uniform(64, map_width - 64)  # Keep away from edges
+            y = random.uniform(64, map_height - 64)
+            
+            # Check distance from player
+            distance = math.sqrt((x - player_x)**2 + (y - player_y)**2)
+            if distance >= min_distance:
+                # Check if position is not blocked
+                if not self._is_position_blocked(x, y):
+                    return (x, y)
+        
+        # Fallback: use preferred position but move it away from player
+        angle = math.atan2(preferred_y - player_y, preferred_x - player_x)
+        safe_x = player_x + math.cos(angle) * min_distance
+        safe_y = player_y + math.sin(angle) * min_distance
+        
+        # Clamp to map bounds
+        safe_x = max(32, min(map_width - 32, safe_x))
+        safe_y = max(32, min(map_height - 32, safe_y))
+        
+        return (safe_x, safe_y)
+    
+    def _is_position_blocked(self, x: float, y: float) -> bool:
+        """
+        Check if a position is blocked by collision tiles.
+        
+        Args:
+            x: X coordinate to check
+            y: Y coordinate to check
+            
+        Returns:
+            True if position is blocked, False otherwise
+        """
+        if not self.collision_system or not self.current_map_data:
+            return False
+        
+        # Create temporary object to test collision
+        test_rect = pygame.Rect(x, y, 32, 32)
+        
+        # Check collision with map
+        tile_x, tile_y = self.map_system.world_to_tile(x, y)
+        return self.map_system.is_tile_solid(tile_x, tile_y)
     
     def _load_map(self, map_path: str) -> None:
         """
@@ -308,6 +414,7 @@ class GameScene(Scene):
         # Clear existing objects
         self.enemies.clear()
         self.items.clear()
+        self.doors.clear()
         
         # Spawn new objects from map data
         self._spawn_map_objects()
@@ -523,6 +630,7 @@ class GameScene(Scene):
         # Clear object lists
         self.enemies.clear()
         self.items.clear()
+        self.doors.clear()
         
         # Clear UI elements
         if self.ui_system:
@@ -568,6 +676,66 @@ class GameScene(Scene):
             self.inventory_ui.visible = self.inventory_open
         
         print(f"Inventory {'opened' if self.inventory_open else 'closed'}")
+    
+    def _check_stage_clear(self) -> None:
+        """Check if stage is cleared (all enemies defeated) and unlock doors."""
+        if self.stage_cleared or self.doors_unlocked:
+            return
+        
+        # Check if all enemies are defeated
+        if self.initial_enemy_count > 0 and len(self.enemies) == 0:
+            self.stage_cleared = True
+            self.doors_unlocked = True
+            
+            print("🎉 Stage Cleared! All enemies defeated!")
+            print("🚪 Doors are now unlocked!")
+            
+            # Unlock all doors
+            for door in self.doors:
+                door.unlock()
+    
+    def _handle_door_interactions(self) -> None:
+        """Handle player interactions with doors."""
+        if not self.player:
+            return
+        
+        # Check for E key press to interact with doors
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_e]:
+            for door in self.doors:
+                if door.can_interact and not door.is_locked:
+                    if door.try_interact(self.player):
+                        # Door opened, check if we should transition
+                        if door.target_map and door.can_pass_through():
+                            self._initiate_door_transition(door)
+                        break
+    
+    def _initiate_door_transition(self, door: Door) -> None:
+        """
+        Initiate transition through a door.
+        
+        Args:
+            door: Door object to transition through
+        """
+        if not door.target_map:
+            return
+        
+        print(f"🚪 Entering door {door.door_id} to {door.target_map}")
+        
+        # Use the map transition system for smooth transition
+        if self.map_transition_system:
+            # Create a temporary transition for the door
+            from src.systems.map_transition_system import MapTransition, TransitionType
+            door_transition = MapTransition(
+                TransitionType.DOOR,
+                door.target_map,
+                door.target_position
+            )
+            
+            self.map_transition_system.start_transition(
+                door_transition,
+                self._handle_map_transition
+            )
     
     def update(self, dt: float) -> None:
         """
@@ -654,6 +822,17 @@ class GameScene(Scene):
             
             # Enemy attacks are handled in combat_system.update() above
         
+        # Check for stage clear condition (all enemies defeated)
+        self._check_stage_clear()
+        
+        # Update doors
+        player_pos = (self.player.x, self.player.y) if self.player else None
+        for door in self.doors:
+            door.update(dt, player_pos)
+        
+        # Handle door interactions
+        self._handle_door_interactions()
+        
         # Update item system
         if self.item_system and self.player:
             # Sync items with item system
@@ -696,9 +875,12 @@ class GameScene(Scene):
         Args:
             screen: The pygame surface to render to
         """
-        # Render map
+        # Clear screen with background color
+        screen.fill((50, 50, 50))  # Dark gray background
+        
+        # Render map background layer
         if self.map_renderer and self.camera and self.current_map_data:
-            self.map_renderer.render_map(screen, self.current_map_data, self.camera)
+            self.map_renderer.render_map(screen, self.current_map_data, self.camera, 'background')
         
         # Get camera offset
         camera_x, camera_y = 0, 0
@@ -709,6 +891,10 @@ class GameScene(Scene):
         for item in self.items:
             item.render(screen, camera_x, camera_y)
         
+        # Render doors
+        for door in self.doors:
+            door.render(screen, camera_x, camera_y)
+        
         # Render enemies
         for enemy in self.enemies:
             enemy.render(screen, camera_x, camera_y)
@@ -716,6 +902,13 @@ class GameScene(Scene):
         # Render player
         if self.player:
             self.player.render(screen, camera_x, camera_y)
+        
+        # Render map foreground/overlay layers if they exist
+        if self.map_renderer and self.camera and self.current_map_data:
+            # Check if there are additional layers to render on top
+            layers = self.current_map_data.get('layers', {})
+            if 'foreground' in layers:
+                self.map_renderer.render_map(screen, self.current_map_data, self.camera, 'foreground')
         
         # Render UI
         if self.ui_system:

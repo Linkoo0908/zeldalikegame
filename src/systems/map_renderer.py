@@ -174,20 +174,51 @@ class MapRenderer:
         """
         surface = pygame.Surface((tile_size, tile_size))
         
-        # Simple color mapping for different tile IDs
+        # Enhanced color mapping for different tile IDs
         colors = {
-            1: (100, 100, 100),  # Gray - walls
-            2: (50, 150, 50),    # Green - grass
-            3: (139, 69, 19),    # Brown - dirt/stone
+            1: (80, 80, 80),     # Dark gray - walls
+            2: (34, 139, 34),    # Forest green - grass/floor
+            3: (139, 69, 19),    # Saddle brown - dirt/stone
             4: (0, 100, 200),    # Blue - water
-            5: (200, 200, 0),    # Yellow - sand
+            5: (238, 203, 173),  # Peach puff - sand
         }
         
         color = colors.get(tile_id, (200, 0, 200))  # Default magenta for unknown tiles
         surface.fill(color)
         
-        # Add a simple border for visibility
-        pygame.draw.rect(surface, (0, 0, 0), surface.get_rect(), 1)
+        # Add texture patterns for better visual distinction
+        if tile_id == 1:  # Wall tiles - add brick pattern
+            brick_color = (60, 60, 60)
+            # Horizontal lines
+            for y in range(0, tile_size, tile_size // 4):
+                pygame.draw.line(surface, brick_color, (0, y), (tile_size, y), 1)
+            # Vertical lines (offset every other row)
+            for x in range(0, tile_size, tile_size // 2):
+                for y in range(0, tile_size, tile_size // 2):
+                    offset = (tile_size // 4) if (y // (tile_size // 2)) % 2 else 0
+                    pygame.draw.line(surface, brick_color, (x + offset, y), (x + offset, y + tile_size // 2), 1)
+        
+        elif tile_id == 2:  # Grass tiles - add small dots
+            dot_color = (20, 100, 20)
+            import random
+            random.seed(tile_id * 1000)  # Consistent pattern
+            for _ in range(8):
+                x = random.randint(2, tile_size - 3)
+                y = random.randint(2, tile_size - 3)
+                pygame.draw.circle(surface, dot_color, (x, y), 1)
+        
+        elif tile_id == 3:  # Stone tiles - add rough texture
+            stone_color = (100, 50, 10)
+            import random
+            random.seed(tile_id * 2000)  # Consistent pattern
+            for _ in range(12):
+                x = random.randint(0, tile_size - 1)
+                y = random.randint(0, tile_size - 1)
+                pygame.draw.rect(surface, stone_color, (x, y, 2, 2))
+        
+        # Add a subtle border for tile definition
+        border_color = tuple(max(0, c - 20) for c in color)
+        pygame.draw.rect(surface, border_color, surface.get_rect(), 1)
         
         return surface
     

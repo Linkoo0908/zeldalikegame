@@ -42,13 +42,23 @@
         "type": "item",
         "x": 240,
         "y": 180,
-        "item_type": "magic_potion"
+        "item_type": "mana_potion"
       },
       {
         "type": "enemy",
         "x": 320,
         "y": 250,
         "enemy_type": "goblin"
+      },
+      {
+        "type": "door",
+        "x": 200,
+        "y": 80,
+        "door_id": "stage2_exit",
+        "target_map": "assets/maps/stage3.json",
+        "target_position": [288, 350],
+        "width": 48,
+        "height": 32
       }
     ]
   },

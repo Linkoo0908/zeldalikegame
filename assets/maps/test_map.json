@@ -40,27 +40,43 @@
     "objects": [
       {
         "type": "enemy",
-        "x": 200,
-        "y": 150,
+        "x": 320,
+        "y": 200,
         "enemy_type": "goblin"
       },
       {
         "type": "item",
-        "x": 300,
-        "y": 200,
+        "x": 400,
+        "y": 250,
         "item_type": "health_potion"
       },
       {
         "type": "enemy",
-        "x": 400,
-        "y": 300,
+        "x": 500,
+        "y": 350,
         "enemy_type": "orc"
       },
       {
         "type": "item",
-        "x": 250,
-        "y": 350,
-        "item_type": "sword"
+        "x": 180,
+        "y": 380,
+        "item_type": "iron_sword"
+      },
+      {
+        "type": "enemy",
+        "x": 450,
+        "y": 150,
+        "enemy_type": "skeleton"
+      },
+      {
+        "type": "door",
+        "x": 300,
+        "y": 50,
+        "door_id": "stage_exit",
+        "target_map": "assets/maps/test_map2.json",
+        "target_position": [240, 320],
+        "width": 48,
+        "height": 32
       }
     ]
   },
